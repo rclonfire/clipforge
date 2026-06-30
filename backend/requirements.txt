@@ -1,0 +1,57 @@
+# ============================================================
+# ClipForge Backend — Pinned Dependencies
+# Versions sourced from .planning/research/STACK.md (2026-03-20)
+# ============================================================
+
+# Web framework
+fastapi==0.135.1
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+websockets==13.0
+
+# Database
+sqlalchemy==2.0.40
+aiosqlite==0.20.0
+# NOTE: Do NOT upgrade aiosqlite to 0.22.x — hanging thread bug confirmed in 0.22.x
+
+# Video download
+# NOTE: Do NOT pin to a fixed version — YouTube bot detection breaks old versions within weeks
+yt-dlp>=2026.3.17
+
+# Video/Audio processing
+# NOTE: Do NOT use ffmpeg-python (kkroening) — unmaintained since 2019
+# Use python-ffmpeg 2.0.x or raw subprocess for ffmpeg calls
+faster-whisper==1.2.1
+whisperx==3.8.2
+
+# AI
+anthropic==0.86.0
+# NOTE: Do NOT use claude-3-haiku-20240307 — deprecated April 2026, use claude-haiku-4-5-20251001
+# NOTE: Do NOT use google-genai for thumbnails — use Anthropic SDK only
+
+# Image processing
+Pillow==11.1.0
+opencv-python==4.10.0.84
+mediapipe==0.10.33
+
+# Subject isolation (Phase 4) -- birefnet-general model downloads on first use (~170MB)
+rembg[gpu]>=2.0.50
+
+# Audio analysis
+librosa==0.11.0
+numpy==2.2.0
+
+# Job queue
+redis==5.2.0
+rq==1.16.2
+
+# Config & utilities
+pydantic==2.10.0
+pydantic-settings==2.13.1
+python-dotenv==1.0.1
+
+# Dev dependencies (install separately or include in dev requirements)
+# pytest
+# pytest-asyncio
+# httpx
+# ruff
