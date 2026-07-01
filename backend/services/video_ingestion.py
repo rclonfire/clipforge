@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from backend.config import DOWNLOADS_DIR, MAX_VIDEO_DURATION, FFPROBE_PATH
+from backend.config import DOWNLOADS_DIR, MAX_VIDEO_DURATION, FFPROBE_PATH, FFMPEG_PATH
 
 # Resolve yt-dlp binary: try venv first, then PATH lookup
 _VENV_BIN = Path(sys.executable).parent
@@ -214,6 +214,86 @@ def download_video(youtube_url: str, job_id: str) -> dict:
         "title": title,
         "duration_seconds": duration_seconds,
         "thumbnail_url": thumbnail_url,
+    }
+
+
+class IngestError(Exception):
+    """Raised when a local video file cannot be imported.
+
+    Attributes:
+        error_code: One of ("file_not_found", "ingest_failed").
+        message: Human-readable description of the failure.
+    """
+
+    def __init__(self, message: str, error_code: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.message = message
+
+
+def ingest_local_file(source_path: str, job_id: str) -> dict:
+    """Import a local edited video file into the job's downloads directory.
+
+    Remuxes the source into a clean ``video.mp4`` (stream copy, no re-encode)
+    so every downstream stage finds a standard MP4 regardless of the source
+    container (.mov, .mkv, .webm, …). Falls back to a re-encode only if the
+    source codecs aren't MP4-compatible.
+
+    Returns the same shape as ``download_video`` so the pipeline is source-agnostic:
+        {video_path, title, duration_seconds, thumbnail_url}
+
+    Raises:
+        IngestError: with .error_code in ("file_not_found", "ingest_failed").
+    """
+    src = Path(source_path).expanduser()
+    if not src.exists() or not src.is_file():
+        raise IngestError(f"Local file not found: {source_path!r}", "file_not_found")
+
+    output_dir = DOWNLOADS_DIR / job_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / "video.mp4"
+
+    remux_cmd = [
+        FFMPEG_PATH, "-y", "-i", str(src),
+        "-c", "copy", "-movflags", "+faststart", str(dest),
+    ]
+    logger.info(f"[{job_id}] Importing local file: {src}")
+    try:
+        result = subprocess.run(remux_cmd, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired as exc:
+        raise IngestError(f"Import timed out for {source_path}", "ingest_failed") from exc
+
+    if result.returncode != 0:
+        # Stream copy fails when source codecs aren't MP4-compatible — re-encode.
+        logger.info(f"[{job_id}] Stream-copy remux failed, re-encoding: {(result.stderr or '')[:200]}")
+        encode_cmd = [
+            FFMPEG_PATH, "-y", "-i", str(src),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-c:a", "aac", "-movflags", "+faststart", str(dest),
+        ]
+        try:
+            result = subprocess.run(encode_cmd, capture_output=True, text=True, timeout=3600)
+        except subprocess.TimeoutExpired as exc:
+            raise IngestError(f"Import (re-encode) timed out for {source_path}", "ingest_failed") from exc
+        if result.returncode != 0:
+            raise IngestError(
+                f"ffmpeg failed to import {source_path}: {(result.stderr or '')[:300]}",
+                "ingest_failed",
+            )
+
+    duration_seconds = 0
+    try:
+        meta = get_video_metadata(str(dest))
+        duration_seconds = int(float(meta.get("format", {}).get("duration", 0) or 0))
+    except Exception as exc:  # pragma: no cover
+        logger.warning(f"[{job_id}] ffprobe failed on imported file: {exc}")
+
+    logger.info(f"[{job_id}] Imported {src.name} ({duration_seconds}s) -> {dest}")
+    return {
+        "video_path": str(dest),
+        "title": src.stem,
+        "duration_seconds": duration_seconds,
+        "thumbnail_url": None,
     }
 
 

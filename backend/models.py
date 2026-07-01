@@ -39,6 +39,11 @@ class Job(Base):
     progress_message = Column(Text, default="")
     error_message = Column(Text)
 
+    # Autonomous song identification (for caption naming on music/violin covers)
+    song_title = Column(Text)
+    song_artist = Column(Text)
+    song_confidence = Column(String)  # high | medium | low | none
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     completed_at = Column(DateTime)
@@ -189,6 +194,18 @@ def _migrate_add_missing_columns() -> None:
         ),
         ("exports", "batch_id"): (
             "ALTER TABLE exports ADD COLUMN batch_id TEXT",
+            None,
+        ),
+        ("jobs", "song_title"): (
+            "ALTER TABLE jobs ADD COLUMN song_title TEXT",
+            None,
+        ),
+        ("jobs", "song_artist"): (
+            "ALTER TABLE jobs ADD COLUMN song_artist TEXT",
+            None,
+        ),
+        ("jobs", "song_confidence"): (
+            "ALTER TABLE jobs ADD COLUMN song_confidence TEXT",
             None,
         ),
     }

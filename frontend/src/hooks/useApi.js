@@ -9,6 +9,9 @@ export function useApi() {
     createJob: (youtubeUrl) =>
       api.post('/jobs', { youtube_url: youtubeUrl }).then((r) => r.data),
 
+    createLocalJob: (sourcePath) =>
+      api.post('/jobs/local', { source_path: sourcePath }).then((r) => r.data),
+
     listJobs: () =>
       api.get('/jobs').then((r) => r.data),
 
@@ -35,6 +38,12 @@ export function useApi() {
 
     getExportDownloadUrl: (jobId, batchId) =>
       `/api/jobs/${jobId}/exports/${batchId}/download`,
+
+    createPostPrep: (jobId, options) =>
+      api.post(`/jobs/${jobId}/post-prep`, options).then((r) => r.data),
+
+    getPostPrepDownloadUrl: (jobId, prepId) =>
+      `/api/jobs/${jobId}/post-prep/${prepId}/download`,
 
     getClipThumbnailUrl: (jobId, clipId) =>
       `/api/jobs/${jobId}/clips/${clipId}/thumbnail`,

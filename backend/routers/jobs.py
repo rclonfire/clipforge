@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 import uuid
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -56,12 +57,18 @@ class JobResponse(BaseModel):
         from_attributes = True
 
 
-def _enqueue_job(job_id: str, youtube_url: str) -> None:
+# Video file extensions accepted for local-path ingestion
+_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"}
+
+
+def _enqueue(func, job_id: str, payload: str) -> None:
     """
-    Enqueue process_job() via RQ if Redis is available.
-    Falls back to a daemon thread (dev mode only) if Redis is unreachable.
+    Enqueue a processing function (process_job / process_local_job) via RQ if
+    Redis is available. Falls back to a daemon thread (dev mode only) otherwise.
+
+    func is called as func(job_id, payload, db_path); the daemon path injects a
+    thread-local DB session.
     """
-    from backend.workers.job_processor import process_job
     db_path = str(settings.db_path)
 
     try:
@@ -73,14 +80,14 @@ def _enqueue_job(job_id: str, youtube_url: str) -> None:
 
         q = Queue(connection=r)
         q.enqueue(
-            process_job,
+            func,
             job_id,
-            youtube_url,
+            payload,
             db_path,
             result_ttl=86400,    # Keep result 24h
             failure_ttl=604800,  # Keep failure 7 days
         )
-        logger.info(f"[{job_id}] Enqueued via RQ on {settings.redis_url}")
+        logger.info(f"[{job_id}] Enqueued {func.__name__} via RQ on {settings.redis_url}")
 
     except Exception as exc:
         logger.warning(
@@ -91,7 +98,7 @@ def _enqueue_job(job_id: str, youtube_url: str) -> None:
         def _run():
             thread_db = SessionLocal()
             try:
-                process_job(job_id, youtube_url, db_path, _db_override=thread_db)
+                func(job_id, payload, db_path, _db_override=thread_db)
             finally:
                 thread_db.close()
 
@@ -114,7 +121,44 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
 
-    _enqueue_job(job_id, body.youtube_url)
+    from backend.workers.job_processor import process_job
+    _enqueue(process_job, job_id, body.youtube_url)
+
+    return _job_to_response(job)
+
+
+class LocalJobCreate(BaseModel):
+    source_path: str
+
+
+@router.post("/local", response_model=JobResponse)
+def create_local_job(body: LocalJobCreate, db: Session = Depends(get_db)):
+    """Submit a local video file (e.g. an editor export) for processing by path."""
+    src = Path(body.source_path).expanduser()
+    if not src.exists() or not src.is_file():
+        raise HTTPException(status_code=400, detail=f"File not found: {body.source_path}")
+    if src.suffix.lower() not in _VIDEO_EXTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{src.suffix}'. Accepted: {', '.join(sorted(_VIDEO_EXTS))}",
+        )
+
+    job_id = str(uuid.uuid4())[:12]
+    resolved = str(src.resolve())
+
+    # Job.youtube_url is NOT NULL; for local jobs it records the source path.
+    job = Job(
+        id=job_id,
+        youtube_url=resolved,
+        status="pending",
+        progress_message="Local file queued, starting soon...",
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    from backend.workers.job_processor import process_local_job
+    _enqueue(process_local_job, job_id, resolved)
 
     return _job_to_response(job)
 

@@ -55,12 +55,13 @@ def test_enhance_thumbnail_with_gemini_is_importable():
 # ---------------------------------------------------------------------------
 
 def test_use_gemini_enhancement_defaults_false():
-    """settings.USE_GEMINI_ENHANCEMENT must default to False."""
-    from backend.config import settings
+    """USE_GEMINI_ENHANCEMENT must default to False in code (a populated .env may enable it)."""
+    from backend.config import settings, Settings
     assert hasattr(settings, "use_gemini_enhancement"), (
         "settings must have use_gemini_enhancement attribute"
     )
-    assert settings.use_gemini_enhancement == False, (
+    # Assert the code default, independent of any local .env override.
+    assert Settings.model_fields["use_gemini_enhancement"].default is False, (
         "USE_GEMINI_ENHANCEMENT must default to False"
     )
 

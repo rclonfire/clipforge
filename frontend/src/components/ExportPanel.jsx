@@ -15,6 +15,9 @@ export default function ExportPanel({ jobId, keptCount }) {
   const [batchId, setBatchId] = useState(null)
   const [exportStatus, setExportStatus] = useState(null)
   const [error, setError] = useState(null)
+  const [prepping, setPrepping] = useState(false)
+  const [prepResult, setPrepResult] = useState(null)
+  const [prepError, setPrepError] = useState(null)
   const pollRef = useRef(null)
   const api = useApi()
 
@@ -71,7 +74,25 @@ export default function ExportPanel({ jobId, keptCount }) {
     }
   }
 
+  const handlePrep = async () => {
+    setPrepError(null)
+    setPrepping(true)
+    try {
+      const result = await api.createPostPrep(jobId, {
+        platforms: ['youtube', 'tiktok'],
+        posts_per_day: 3,
+      })
+      setPrepResult(result)
+    } catch (err) {
+      setPrepError(err.response?.data?.detail || 'Failed to prep clips for posting')
+    } finally {
+      setPrepping(false)
+    }
+  }
+
   const downloadUrl = batchId ? api.getExportDownloadUrl(jobId, batchId) : null
+  const prepDownloadUrl =
+    prepResult ? api.getPostPrepDownloadUrl(jobId, prepResult.prep_id) : null
   const isComplete = exportStatus?.status === 'complete'
   const progressPct = exportStatus
     ? Math.round((exportStatus.completed_clips / Math.max(exportStatus.total_clips, 1)) * 100)
@@ -170,6 +191,76 @@ export default function ExportPanel({ jobId, keptCount }) {
         >
           Download ZIP ({exportStatus.total_clips} clip{exportStatus.total_clips !== 1 ? 's' : ''} + thumbnails)
         </a>
+      )}
+
+      {/* Prep for posting (YouTube Shorts + TikTok) */}
+      {isComplete && (
+        <div className="border-t border-gray-800 pt-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-semibold text-white">Prep for posting</h4>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Titles, captions, hashtags & a 2–3/day schedule for YouTube Shorts + TikTok
+              </p>
+            </div>
+          </div>
+
+          {!prepResult && (
+            <button
+              onClick={handlePrep}
+              disabled={prepping}
+              className={`w-full py-3 rounded-lg text-sm font-semibold transition-colors ${
+                prepping
+                  ? 'bg-purple-500/30 text-purple-300 cursor-wait'
+                  : 'bg-purple-500 text-white hover:bg-purple-600'
+              }`}
+            >
+              {prepping ? 'Generating post copy...' : 'Prep for YouTube + TikTok'}
+            </button>
+          )}
+
+          {prepResult && (
+            <div className="space-y-3">
+              <a
+                href={prepDownloadUrl}
+                download
+                className="block w-full py-3 rounded-lg text-sm font-semibold text-center bg-green-500 text-white hover:bg-green-600 transition-colors"
+              >
+                Download post-ready bundle ({prepResult.clip_count} clip
+                {prepResult.clip_count !== 1 ? 's' : ''})
+              </a>
+
+              {prepResult.clips?.[0] && (
+                <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-medium text-gray-400">Example — clip 1</p>
+                  <div className="text-xs text-gray-300">
+                    <span className="text-gray-500">YouTube:</span>{' '}
+                    {prepResult.clips[0].youtube.title}
+                  </div>
+                  <div className="text-xs text-gray-300">
+                    <span className="text-gray-500">TikTok:</span>{' '}
+                    {prepResult.clips[0].tiktok.caption}{' '}
+                    <span className="text-purple-400">
+                      {prepResult.clips[0].tiktok.hashtags.join(' ')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500">
+                {prepResult.schedule?.length || 0} posts scheduled starting{' '}
+                {prepResult.start_date}. Upload each clip to the platform's own scheduler
+                using <code className="text-gray-400">schedule.md</code> in the bundle.
+              </p>
+            </div>
+          )}
+
+          {prepError && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+              <p className="text-sm text-red-400">{prepError}</p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Error */}

@@ -1,25 +1,52 @@
 import { useState } from 'react'
 
+const MODES = [
+  { id: 'youtube', label: 'YouTube URL' },
+  { id: 'local', label: 'Local file' },
+]
+
 export default function URLInput({ onSubmit, loading }) {
-  const [url, setUrl] = useState('')
+  const [mode, setMode] = useState('youtube')
+  const [value, setValue] = useState('')
+
+  const isYouTube = value.includes('youtube.com/watch') || value.includes('youtu.be/')
+  const isLocalPath = /\.(mp4|mov|mkv|webm|m4v|avi)$/i.test(value.trim())
+  const isValid = mode === 'youtube' ? isYouTube : isLocalPath
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (url.trim()) {
-      onSubmit(url.trim())
+    if (value.trim() && isValid) {
+      onSubmit(value.trim(), mode)
     }
   }
 
-  const isValidUrl = url.includes('youtube.com/watch') || url.includes('youtu.be/')
-
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto">
+    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto space-y-3">
+      {/* Source toggle */}
+      <div className="flex gap-2 justify-center">
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setMode(m.id)}
+            disabled={loading}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              mode === m.id
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex gap-3">
         <input
           type="text"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="Paste a YouTube URL..."
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={mode === 'youtube' ? 'Paste a YouTube URL...' : '/path/to/your-export.mp4'}
           className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg
                      text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500
                      focus:ring-1 focus:ring-indigo-500 transition-colors"
@@ -27,7 +54,7 @@ export default function URLInput({ onSubmit, loading }) {
         />
         <button
           type="submit"
-          disabled={!isValidUrl || loading}
+          disabled={!isValid || loading}
           className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700
                      disabled:text-gray-500 text-white font-medium rounded-lg
                      transition-colors whitespace-nowrap"
@@ -43,8 +70,13 @@ export default function URLInput({ onSubmit, loading }) {
           ) : 'Generate'}
         </button>
       </div>
-      {url && !isValidUrl && (
-        <p className="mt-2 text-sm text-gray-500">Enter a valid YouTube URL</p>
+
+      {value && !isValid && (
+        <p className="mt-2 text-sm text-gray-500">
+          {mode === 'youtube'
+            ? 'Enter a valid YouTube URL'
+            : 'Enter a path to a video file (.mp4, .mov, .mkv, .webm, .m4v, .avi)'}
+        </p>
       )}
     </form>
   )

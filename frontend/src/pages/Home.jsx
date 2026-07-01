@@ -15,14 +15,20 @@ export default function Home() {
     api.listJobs().then(setJobs).catch(console.error)
   }, [])
 
-  const handleSubmit = async (url) => {
+  const handleSubmit = async (value, mode = 'youtube') => {
     setLoading(true)
     try {
-      const job = await api.createJob(url)
+      const job = mode === 'local'
+        ? await api.createLocalJob(value)
+        : await api.createJob(value)
       navigate(`/job/${job.id}`)
     } catch (err) {
       console.error('Failed to create job:', err)
-      alert('Failed to submit video. Check the URL and try again.')
+      alert(
+        mode === 'local'
+          ? (err.response?.data?.detail || 'Failed to start local job. Check the file path and try again.')
+          : 'Failed to submit video. Check the URL and try again.'
+      )
     } finally {
       setLoading(false)
     }
@@ -36,8 +42,9 @@ export default function Home() {
           AI-Powered Thumbnails & Clips
         </h1>
         <p className="text-gray-400 max-w-lg mx-auto">
-          Paste a YouTube URL to generate high-CTR thumbnails and discover
-          your best short-form clip moments, scored for virality.
+          Paste a YouTube URL or point ClipForge at a local file to generate
+          high-CTR thumbnails and discover your best short-form clip moments,
+          scored for virality.
         </p>
       </div>
 

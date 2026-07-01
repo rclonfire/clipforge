@@ -93,10 +93,11 @@ def health_check():
 # Routers — imported after app is created to avoid circular imports
 # ---------------------------------------------------------------------------
 try:
-    from backend.routers import jobs, thumbnails, clips, exports
+    from backend.routers import jobs, thumbnails, clips, exports, posts
     app.include_router(jobs.router)
     app.include_router(thumbnails.router)
     app.include_router(clips.router)
     app.include_router(exports.router)
+    app.include_router(posts.router)
 except ImportError as exc:
     logger.warning(f"Could not import one or more routers: {exc}. Starting without them.")
