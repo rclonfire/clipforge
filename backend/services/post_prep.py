@@ -30,7 +30,7 @@ from pathlib import Path
 
 import anthropic
 
-from backend.config import ANTHROPIC_API_KEY
+from backend.config import ANTHROPIC_API_KEY, USE_PAID_APIS
 from backend.prompts.post_copy_system import POST_COPY_SYSTEM_PROMPT
 from backend.services.creator_style import (
     load_style_profile,
@@ -70,7 +70,8 @@ def generate_post_copy(clips: list, video_title: str | None, song: dict | None =
     profile = load_style_profile()
     named = is_named(song)
 
-    if not ANTHROPIC_API_KEY:
+    if not USE_PAID_APIS or not ANTHROPIC_API_KEY:
+        # Free/local path: deterministic templates from clip metadata + style profile.
         return {c.id: _template_copy(c, profile, song=song, named=named) for c in clips}
 
     try:

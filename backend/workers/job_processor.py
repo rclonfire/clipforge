@@ -289,31 +289,35 @@ def _run_pipeline(db: Session, job_id: str, video_info: dict) -> None:
     _set_status(db, job_id, "enhancing_frames", "Enhancing frames for thumbnail quality...")
     frames = enhance_frames_batch(frames)
 
-    # Stage 4: Generate thumbnails
-    _set_status(db, job_id, "generating_thumbnails", "Generating thumbnails...")
-    thumbnails = generate_thumbnails(
-        frames,
-        transcript_data,
-        job_id,
-        enhance=settings.use_gemini_enhancement,
-        video_title=video_info.get("title", ""),
-    )
-
-    for thumb in thumbnails:
-        db_thumb = Thumbnail(
-            id=thumb.get("thumb_id", str(_uuid.uuid4())[:8]),
-            job_id=job_id,
-            frame_index=thumb.get("frame_index"),
-            text_overlay=thumb.get("concept", {}).get("text_overlay", ""),
-            text_position=thumb.get("concept", {}).get("text_position", ""),
-            style_notes=thumb.get("concept", {}).get("style_notes", ""),
-            reasoning=thumb.get("concept", {}).get("reasoning", ""),
-            file_path=thumb.get("file_path", ""),
-            generation_type=thumb.get("generation_type", "pillow"),
+    # Stage 4: Generate thumbnails — paid (Claude concepts + optional Gemini polish).
+    # Skipped entirely in free mode; Shorts/TikTok pick a cover frame themselves.
+    if settings.use_paid_apis:
+        _set_status(db, job_id, "generating_thumbnails", "Generating thumbnails...")
+        thumbnails = generate_thumbnails(
+            frames,
+            transcript_data,
+            job_id,
+            enhance=settings.use_gemini_enhancement,
+            video_title=video_info.get("title", ""),
         )
-        db.add(db_thumb)
-    db.commit()
-    logger.info(f"[{job_id}] Saved {len(thumbnails)} thumbnail(s) to database")
+
+        for thumb in thumbnails:
+            db_thumb = Thumbnail(
+                id=thumb.get("thumb_id", str(_uuid.uuid4())[:8]),
+                job_id=job_id,
+                frame_index=thumb.get("frame_index"),
+                text_overlay=thumb.get("concept", {}).get("text_overlay", ""),
+                text_position=thumb.get("concept", {}).get("text_position", ""),
+                style_notes=thumb.get("concept", {}).get("style_notes", ""),
+                reasoning=thumb.get("concept", {}).get("reasoning", ""),
+                file_path=thumb.get("file_path", ""),
+                generation_type=thumb.get("generation_type", "pillow"),
+            )
+            db.add(db_thumb)
+        db.commit()
+        logger.info(f"[{job_id}] Saved {len(thumbnails)} thumbnail(s) to database")
+    else:
+        logger.info(f"[{job_id}] Free mode: skipping AI thumbnail generation (no paid calls)")
 
     # Stage 5: Signal analysis (reuses audio.wav written to disk by Stage 2)
     job_dir = settings.downloads_dir / job_id
@@ -323,24 +327,26 @@ def _run_pipeline(db: Session, job_id: str, video_info: dict) -> None:
         words=transcript_data.get("words", []),
     )
 
-    # Stage 6: Detect clips — route to the music brain for instrumental content
-    # (violin/music covers have no speech), otherwise the speech/comedy brain.
+    # Stage 6: Detect clips.
+    # - Free mode OR instrumental content -> music/energy brain (librosa energy
+    #   fallback is fully local; Gemini is used only when paid APIs are enabled).
+    # - Paid mode + speech content -> the Claude comedy/transcript brain.
     words = transcript_data.get("words", [])
     duration = float(transcript_data.get("duration", 0))
-    if looks_instrumental(words, duration):
-        _set_status(db, job_id, "detecting_clips", "Detecting best musical moments...")
-        raw_clips = detect_music_clips(
-            audio_path=str(job_dir / "audio.wav"),
-            signal_data=signal_data,
-            duration_seconds=duration,
-            ffmpeg_path=settings.ffmpeg_path,
-        )
-    else:
+    if settings.use_paid_apis and not looks_instrumental(words, duration):
         _set_status(db, job_id, "detecting_clips", "Detecting viral clip moments...")
         raw_clips = detect_clips(
             words=words,
             signal_data=signal_data,
             duration_seconds=duration,
+        )
+    else:
+        _set_status(db, job_id, "detecting_clips", "Detecting best moments...")
+        raw_clips = detect_music_clips(
+            audio_path=str(job_dir / "audio.wav"),
+            signal_data=signal_data,
+            duration_seconds=duration,
+            ffmpeg_path=settings.ffmpeg_path,
         )
 
     # Stage 7: Extract preview files (MUST complete before marking job complete)

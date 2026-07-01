@@ -20,7 +20,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from backend.config import GEMINI_API_KEY
+from backend.config import GEMINI_API_KEY, USE_PAID_APIS
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,8 @@ def identify_song(audio_path: str, ffmpeg_path: str = "ffmpeg") -> dict:
     """Identify the song in an instrumental cover. Degrades to confidence 'none' on any failure."""
     result = {"song": "", "artist": "", "confidence": "none", "raw": ""}
 
-    if not GEMINI_API_KEY:
-        logger.info("song_identify: GEMINI_API_KEY not set — captions will be vibe-only")
+    if not USE_PAID_APIS or not GEMINI_API_KEY:
+        logger.info("song_identify: paid APIs disabled or no key — skipping (captions stay vibe-only)")
         return result
 
     src = Path(audio_path)

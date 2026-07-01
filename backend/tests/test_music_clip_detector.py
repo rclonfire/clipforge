@@ -49,6 +49,21 @@ def test_detect_music_clips_energy_fallback(monkeypatch):
         assert set(c) >= {"start_time_seconds", "end_time_seconds", "clip_title", "virality_score", "clip_type"}
 
 
+def test_detect_music_clips_free_mode_skips_gemini(monkeypatch):
+    # Key present, but free mode -> energy fallback only, Gemini never called
+    monkeypatch.setattr(mcd, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(mcd, "USE_PAID_APIS", False)
+
+    def _boom(*a, **k):
+        raise AssertionError("Gemini must not be called in free mode")
+
+    monkeypatch.setattr(mcd, "_gemini_clips", _boom)
+
+    signal = {"energy_peaks": [{"time_seconds": t} for t in (40, 41, 42, 120)], "onset_times": []}
+    clips = detect_music_clips("/tmp/none.wav", signal, duration_seconds=180)
+    assert clips
+
+
 def test_detect_music_clips_short_piece(monkeypatch):
     monkeypatch.setattr(mcd, "GEMINI_API_KEY", "")
     clips = detect_music_clips("/tmp/none.wav", {"energy_peaks": [], "onset_times": []}, duration_seconds=45)

@@ -60,6 +60,20 @@ def test_generate_post_copy_falls_back_to_templates_without_key(monkeypatch):
         assert copy["youtube"]["title"].endswith("#Shorts")
 
 
+def test_generate_post_copy_free_mode_skips_claude(monkeypatch):
+    # Key present, but free mode -> templates only, Claude never called
+    monkeypatch.setattr(post_prep, "ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(post_prep, "USE_PAID_APIS", False)
+
+    def _boom(*a, **k):
+        raise AssertionError("Claude must not be called in free mode")
+
+    monkeypatch.setattr(post_prep, "_claude_copy", _boom)
+
+    result = post_prep.generate_post_copy([_clip("a")], "Vid")
+    assert "a" in result and result["a"]["youtube"]["title"].endswith("#Shorts")
+
+
 def test_template_copy_names_song_when_confidently_identified():
     clip = _clip("c1")
     song = {"song": "Snooze", "artist": "SZA", "confidence": "high"}

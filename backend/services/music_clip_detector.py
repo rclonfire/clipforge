@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from backend.config import GEMINI_API_KEY
+from backend.config import GEMINI_API_KEY, USE_PAID_APIS
 from backend.prompts.music_clip_system import MUSIC_CLIP_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -60,13 +60,14 @@ def detect_music_clips(
     onsets = [float(t) for t in (signal_data or {}).get("onset_times", [])]
 
     raw: list[dict] = []
-    if GEMINI_API_KEY:
+    if USE_PAID_APIS and GEMINI_API_KEY:
         try:
             raw = _gemini_clips(audio_path, duration_seconds, ffmpeg_path)
         except Exception as exc:  # noqa: BLE001 — degrade to energy heuristic
             logger.warning("music_clip_detector: Gemini analysis failed (%s) — energy fallback", exc)
 
     if not raw:
+        # Free/local path: cut around the densest energy regions (librosa, no API).
         raw = _energy_fallback(signal_data or {}, duration_seconds)
 
     # Snap to phrase boundaries, enforce duration, dedup overlaps, cap.

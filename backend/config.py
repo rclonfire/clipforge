@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
 
     # Feature flags
+    # MASTER COST SWITCH. Default False = fully free/local: NO Claude or Gemini
+    # calls are ever made. Everything runs on-device (Whisper, ffmpeg, librosa,
+    # Pillow) with free fallbacks. Set USE_PAID_APIS=true only to opt in to the
+    # paid AI stages (song ID, music/comedy clip brains, AI thumbnails, LLM captions).
+    use_paid_apis: bool = False
     use_gemini_enhancement: bool = False  # When True, Pillow output is passed to Gemini for background stylization
 
     # Data directory — defaults to <project_root>/data
@@ -152,3 +157,4 @@ FFMPEG_PATH = settings.ffmpeg_path
 FFPROBE_PATH = settings.ffprobe_path
 GEMINI_HEADSHOTS_DIR = settings.gemini_headshots_dir
 USE_GEMINI_ENHANCEMENT = settings.use_gemini_enhancement
+USE_PAID_APIS = settings.use_paid_apis
